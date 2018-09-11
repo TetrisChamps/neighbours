@@ -7,8 +7,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
-import java.util.Arrays;
-import java.util.Random;
+import java.util.*;
 
 import static java.lang.Math.round;
 import static java.lang.Math.sqrt;
@@ -25,6 +24,16 @@ import static java.lang.System.*;
  */
 // Extends Application because of JavaFX (just accept for now)
 public class Neighbours extends Application {
+
+    class Point {
+        public final int x;
+        public final int y;
+
+        public Point(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
 
     // Enumeration type for the Actors
     enum Actor {
@@ -47,7 +56,20 @@ public class Neighbours extends Application {
     void updateWorld() {
         // % of surrounding neighbours that are like me
         final double threshold = 0.7;
-       // TODO
+        // TODO
+
+        // List of all empty points in world
+        LinkedList<Point> empty = new LinkedList<>();
+        // List of all unsatisfied red points in world
+        LinkedList<Point> red = new LinkedList<>();
+        // List of all unsatisfied blue points in world
+        LinkedList<Point> blue = new LinkedList<>();
+
+        findEmptyAndDissatisfied(world, empty, red, blue, threshold);
+
+        shuffleLists(empty, red, blue);
+
+        moveDissatisfiedPoints(world, empty, red, blue);
     }
 
     // This method initializes the world variable with a random distribution of Actors
@@ -58,14 +80,63 @@ public class Neighbours extends Application {
         //test();    // <---------------- Uncomment to TEST!
 
         // %-distribution of RED, BLUE and NONE
-        double[] dist = {0.25, 0.25, 0.50};
+        double[] dist = {0.50, 0.45, 0.00};
         // Number of locations (places) in world (square)
-        int nLocations = 900;
+        int size = 300;
+        int nLocations = size * size;
+
+        world = new Actor[size][size];
 
         // TODO
+        generateWorld(world, dist[0], dist[1]);
 
         // Should be last
         fixScreenSize(nLocations);
+    }
+
+    void generateWorld(Actor[][] world, double redPercentage, double bluePercentage) {
+        Random rand = new Random();
+
+        for (int x = 0; x < world.length; ++x) {
+            for (int y = 0; y < world.length; ++y) {
+                double randomValue = rand.nextDouble();
+                if (randomValue < redPercentage) {
+                    world[x][y] = Actor.RED;
+                } else if (randomValue < redPercentage + bluePercentage) {
+                    world[x][y] = Actor.BLUE;
+                } else {
+                    world[x][y] = Actor.NONE;
+                }
+            }
+        }
+    }
+
+    double neighbourDensity(Actor[][] world, int x, int y) {
+        int totalNeighbourCount = 0;
+        int sameNeighbourCount = 0;
+        for (int i = -1; i <= 1; ++i) {
+            for (int j = -1; j <= 1; ++j) {
+                if (i == 0 && j == 0) {
+                    continue;
+                }
+                if (x < 0 || y < 0 || x >= world.length || y >= world.length) {
+                    continue;
+                }
+                if (x + i < 0 || y + j < 0 || x + i >= world.length || y + j >= world.length) {
+                    continue;
+                }
+                if (world[x][y] == world[x + i][y + j]) {
+                    sameNeighbourCount++;
+                }
+                if (world[x + i][y + j] != Actor.NONE) {
+                    totalNeighbourCount++;
+                }
+            }
+        }
+        if (totalNeighbourCount == 0) {
+            return 0.0;
+        }
+        return (double) sameNeighbourCount / totalNeighbourCount;
     }
 
 
@@ -73,13 +144,62 @@ public class Neighbours extends Application {
 
     // TODO write the methods here, implement/test bottom up
 
+    void moveDissatisfiedPoints(Actor[][] world, LinkedList<Point> empty, LinkedList<Point> red, LinkedList<Point> blue) {
+        Random rand = new Random();
 
+        while (empty.size() > 0) {
+            Point p = empty.removeLast();
+            int choice = rand.nextInt(2);
+            if (choice == 0) {
+                if (red.size() > 0) {
+                    movePoint(world, red, p, Actor.RED);
+                } else if (blue.size() > 0) {
+                    movePoint(world, blue, p, Actor.BLUE);
+                } else {
+                    break;
+                }
+            } else if (choice == 1) {
+                if (blue.size() > 0) {
+                    movePoint(world, blue, p, Actor.BLUE);
+                } else if (red.size() > 0) {
+                    movePoint(world, red, p, Actor.RED);
+                } else {
+                    break;
+                }
+            }
+        }
+    }
 
+    void findEmptyAndDissatisfied(Actor[][] world, LinkedList<Point> empty, LinkedList<Point> red, LinkedList<Point> blue, double threshold) {
+        for (int x = 0; x < world.length; ++x) {
+            for (int y = 0; y < world.length; ++y) {
+                if (world[x][y] == Actor.NONE) {
+                    empty.addLast(new Point(x, y));
+                } else if (neighbourDensity(world, x, y) < threshold) {
+                    switch (world[x][y]) {
+                        case RED:
+                            red.addLast(new Point(x, y));
+                            break;
+                        case BLUE:
+                            blue.addLast(new Point(x, y));
+                            break;
+                    }
+                }
+            }
+        }
+    }
 
+    void shuffleLists(LinkedList<Point> empty, LinkedList<Point> red, LinkedList<Point> blue) {
+        Collections.shuffle(empty);
+        Collections.shuffle(red);
+        Collections.shuffle(blue);
+    }
 
-
-
-
+    void movePoint(Actor[][] world, LinkedList<Point> points, Point movingTo, Actor moverType) {
+        Point movingFrom = points.removeLast();
+        world[movingTo.x][movingTo.y] = moverType;
+        world[movingFrom.x][movingFrom.y] = Actor.NONE;
+    }
 
     // ------- Testing -------------------------------------
 
