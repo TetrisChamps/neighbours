@@ -51,6 +51,10 @@ public class Neighbours extends Application {
     // This variable may *only* be used in methods init() and updateWorld()
     Actor[][] world;              // The world is a square matrix of Actors
 
+    // TODO: This should not a be an instance variable
+    // %-distribution of RED, BLUE and NONE
+    double[] dist = {0.45, 0.45, 0.00};
+
     // This is the method called by the timer to update the world
     // (i.e move unsatisfied) approx each 1/60 sec.
     void updateWorld() {
@@ -69,7 +73,7 @@ public class Neighbours extends Application {
 
         shuffleLists(empty, red, blue);
 
-        moveDissatisfiedPoints(world, empty, red, blue);
+        moveDissatisfiedPoints(world, empty, red, blue, dist);
     }
 
     // This method initializes the world variable with a random distribution of Actors
@@ -79,10 +83,9 @@ public class Neighbours extends Application {
     public void init() {
         //test();    // <---------------- Uncomment to TEST!
 
-        // %-distribution of RED, BLUE and NONE
-        double[] dist = {0.50, 0.45, 0.00};
+
         // Number of locations (places) in world (square)
-        int size = 300;
+        int size = 100;
         int nLocations = size * size;
 
         world = new Actor[size][size];
@@ -144,13 +147,13 @@ public class Neighbours extends Application {
 
     // TODO write the methods here, implement/test bottom up
 
-    void moveDissatisfiedPoints(Actor[][] world, LinkedList<Point> empty, LinkedList<Point> red, LinkedList<Point> blue) {
+    void moveDissatisfiedPoints(Actor[][] world, LinkedList<Point> empty, LinkedList<Point> red, LinkedList<Point> blue, double[] distribution) {
         Random rand = new Random();
 
         while (empty.size() > 0) {
             Point p = empty.removeLast();
-            int choice = rand.nextInt(2);
-            if (choice == 0) {
+            double choice = rand.nextDouble();
+            if (choice < distribution[0] / (distribution[0] + distribution[1])) {
                 if (red.size() > 0) {
                     movePoint(world, red, p, Actor.RED);
                 } else if (blue.size() > 0) {
@@ -158,7 +161,7 @@ public class Neighbours extends Application {
                 } else {
                     break;
                 }
-            } else if (choice == 1) {
+            } else {
                 if (blue.size() > 0) {
                     movePoint(world, blue, p, Actor.BLUE);
                 } else if (red.size() > 0) {
@@ -236,7 +239,7 @@ public class Neighbours extends Application {
     double width = 400;   // Size for window
     double height = 400;
     long previousTime = nanoTime();
-    final long interval = 450000000;
+    final long interval = 33300000;
     double dotSize;
     final double margin = 50;
 
