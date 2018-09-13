@@ -26,10 +26,10 @@ import static java.lang.System.*;
 public class Neighbours extends Application {
 
     class Point {
-        public final int x;
-        public final int y;
+        final int x;
+        final int y;
 
-        public Point(int x, int y) {
+        Point(int x, int y) {
             this.x = x;
             this.y = y;
         }
@@ -49,11 +49,7 @@ public class Neighbours extends Application {
 
     // Below is the *only* accepted instance variable (i.e. variables outside any method)
     // This variable may *only* be used in methods init() and updateWorld()
-    Actor[][] world;              // The world is a square matrix of Actors
-
-    // TODO: This should not a be an instance variable
-    // %-distribution of RED, BLUE and NONE
-    double[] dist = {0.45, 0.45, 0.00};
+    private Actor[][] world;              // The world is a square matrix of Actors
 
     // This is the method called by the timer to update the world
     // (i.e move unsatisfied) approx each 1/60 sec.
@@ -63,17 +59,17 @@ public class Neighbours extends Application {
         // TODO
 
         // List of all empty points in world
-        LinkedList<Point> empty = new LinkedList<>();
+        LinkedList<Point> empty = getEmptyActors(world);
         // List of all unsatisfied red points in world
-        LinkedList<Point> red = new LinkedList<>();
+        LinkedList<Point> red = getDissatisfiedRedActors(world, threshold);
         // List of all unsatisfied blue points in world
-        LinkedList<Point> blue = new LinkedList<>();
+        LinkedList<Point> blue = getDissatisfiedBlueActors(world, threshold);
 
-        findEmptyAndDissatisfied(world, empty, red, blue, threshold);
+        Collections.shuffle(empty);
+        Collections.shuffle(red);
+        Collections.shuffle(blue);
 
-        shuffleLists(empty, red, blue);
-
-        moveDissatisfiedPoints(world, empty, red, blue, dist);
+        moveDissatisfiedPoints(world, empty, red, blue);
     }
 
     // This method initializes the world variable with a random distribution of Actors
@@ -81,40 +77,58 @@ public class Neighbours extends Application {
     // Don't care about "@Override" and "public" (just accept for now)
     @Override
     public void init() {
-        //test();    // <---------------- Uncomment to TEST!
+        test();    // <---------------- Uncomment to TEST!
 
+        // %-distribution of RED, BLUE and NONE
+        double[] dist = {0.45, 0.45, 0.00};
 
         // Number of locations (places) in world (square)
-        int size = 100;
-        int nLocations = size * size;
-
-        world = new Actor[size][size];
+        int nLocations = 500 * 500;
 
         // TODO
-        generateWorld(world, dist[0], dist[1]);
+        world = generateWorld(nLocations, dist[0], dist[1]);
 
         // Should be last
         fixScreenSize(nLocations);
     }
 
-    void generateWorld(Actor[][] world, double redPercentage, double bluePercentage) {
-        Random rand = new Random();
+    Actor[][] generateWorld(int nLocations, double redPercentage, double bluePercentage) {
+        int size = (int) Math.floor(Math.sqrt(nLocations));
+        Actor[][] world = new Actor[size][size];
+
+        nLocations = size * size;
+
+        int nReds = (int) Math.ceil(redPercentage * nLocations);
+        int nBlues = (int) Math.floor(bluePercentage * nLocations);
+
+        ArrayList<Actor> actors = new ArrayList<>(nLocations);
+
+        for (int i = 0; i < nLocations; ++i) {
+            if (i < nReds) {
+                actors.add(Actor.RED);
+            } else if (i < nReds + nBlues) {
+                actors.add(Actor.BLUE);
+            } else {
+                actors.add(Actor.NONE);
+            }
+        }
+
+        Collections.shuffle(actors);
 
         for (int x = 0; x < world.length; ++x) {
             for (int y = 0; y < world.length; ++y) {
-                double randomValue = rand.nextDouble();
-                if (randomValue < redPercentage) {
-                    world[x][y] = Actor.RED;
-                } else if (randomValue < redPercentage + bluePercentage) {
-                    world[x][y] = Actor.BLUE;
-                } else {
-                    world[x][y] = Actor.NONE;
-                }
+                world[x][y] = actors.get(y * world.length + x);
             }
         }
+
+        return world;
     }
 
-    double neighbourDensity(Actor[][] world, int x, int y) {
+    State getActorSatisfaction(Actor[][] world, int x, int y, double threshold) {
+        if (world[x][y] == Actor.NONE) {
+            return State.UNSATISFIED;
+        }
+
         int totalNeighbourCount = 0;
         int sameNeighbourCount = 0;
         for (int i = -1; i <= 1; ++i) {
@@ -137,9 +151,10 @@ public class Neighbours extends Application {
             }
         }
         if (totalNeighbourCount == 0) {
-            return 0.0;
+            return State.UNSATISFIED;
         }
-        return (double) sameNeighbourCount / totalNeighbourCount;
+        double density = (double) sameNeighbourCount / totalNeighbourCount;
+        return density >= threshold ? State.SATISFIED : State.UNSATISFIED;
     }
 
 
@@ -147,25 +162,31 @@ public class Neighbours extends Application {
 
     // TODO write the methods here, implement/test bottom up
 
-    void moveDissatisfiedPoints(Actor[][] world, LinkedList<Point> empty, LinkedList<Point> red, LinkedList<Point> blue, double[] distribution) {
+    void moveDissatisfiedPoints(Actor[][] world, LinkedList<Point> emptyActors, LinkedList<Point> dissatisfiedRedActors, LinkedList<Point> dissatisfiedBlueActors) {
         Random rand = new Random();
 
-        while (empty.size() > 0) {
-            Point p = empty.removeLast();
+        // Percentage of red dissatisfied actors in relation to the sum of red and blue
+        // dissatisfied actors, to make sure the chance of an actor moving is directly
+        // proportional to the amount of dissatisfied actors of that colour.
+        double percentageOfRedActors = (double) dissatisfiedRedActors.size() / (dissatisfiedRedActors.size() + dissatisfiedBlueActors.size());
+
+        while (emptyActors.size() > 0) {
+            // Get the next empty location
+            Point nextEmptyLocation = emptyActors.removeLast();
             double choice = rand.nextDouble();
-            if (choice < distribution[0] / (distribution[0] + distribution[1])) {
-                if (red.size() > 0) {
-                    movePoint(world, red, p, Actor.RED);
-                } else if (blue.size() > 0) {
-                    movePoint(world, blue, p, Actor.BLUE);
+            if (choice < percentageOfRedActors) {
+                if (dissatisfiedRedActors.size() > 0) {
+                    movePoint(world, dissatisfiedRedActors.removeLast(), nextEmptyLocation);
+                } else if (dissatisfiedBlueActors.size() > 0) {
+                    movePoint(world, dissatisfiedBlueActors.removeLast(), nextEmptyLocation);
                 } else {
                     break;
                 }
             } else {
-                if (blue.size() > 0) {
-                    movePoint(world, blue, p, Actor.BLUE);
-                } else if (red.size() > 0) {
-                    movePoint(world, red, p, Actor.RED);
+                if (dissatisfiedBlueActors.size() > 0) {
+                    movePoint(world, dissatisfiedBlueActors.removeLast(), nextEmptyLocation);
+                } else if (dissatisfiedRedActors.size() > 0) {
+                    movePoint(world, dissatisfiedRedActors.removeLast(), nextEmptyLocation);
                 } else {
                     break;
                 }
@@ -173,34 +194,40 @@ public class Neighbours extends Application {
         }
     }
 
-    void findEmptyAndDissatisfied(Actor[][] world, LinkedList<Point> empty, LinkedList<Point> red, LinkedList<Point> blue, double threshold) {
+    LinkedList<Point> getEmptyActors(Actor[][] world) {
+        LinkedList<Point> emptyActors = new LinkedList<>();
         for (int x = 0; x < world.length; ++x) {
             for (int y = 0; y < world.length; ++y) {
                 if (world[x][y] == Actor.NONE) {
-                    empty.addLast(new Point(x, y));
-                } else if (neighbourDensity(world, x, y) < threshold) {
-                    switch (world[x][y]) {
-                        case RED:
-                            red.addLast(new Point(x, y));
-                            break;
-                        case BLUE:
-                            blue.addLast(new Point(x, y));
-                            break;
-                    }
+                    emptyActors.push(new Point(x, y));
                 }
             }
         }
+        return emptyActors;
     }
 
-    void shuffleLists(LinkedList<Point> empty, LinkedList<Point> red, LinkedList<Point> blue) {
-        Collections.shuffle(empty);
-        Collections.shuffle(red);
-        Collections.shuffle(blue);
+    LinkedList<Point> getDissatisfiedRedActors(Actor[][] world, double threshold) {
+        return getDissatisfiedActors(world, Actor.RED, threshold);
     }
 
-    void movePoint(Actor[][] world, LinkedList<Point> points, Point movingTo, Actor moverType) {
-        Point movingFrom = points.removeLast();
-        world[movingTo.x][movingTo.y] = moverType;
+    LinkedList<Point> getDissatisfiedBlueActors(Actor[][] world, double threshold) {
+        return getDissatisfiedActors(world, Actor.BLUE, threshold);
+    }
+
+    LinkedList<Point> getDissatisfiedActors(Actor[][] world, Actor type, double threshold) {
+        LinkedList<Point> dissatisfiedActors = new LinkedList<>();
+        for (int x = 0; x < world.length; ++x) {
+            for (int y = 0; y < world.length; ++y) {
+                if (world[x][y] == type && getActorSatisfaction(world, x, y, threshold) == State.UNSATISFIED) {
+                    dissatisfiedActors.push(new Point(x, y));
+                }
+            }
+        }
+        return dissatisfiedActors;
+    }
+
+    void movePoint(Actor[][] world, Point movingFrom, Point movingTo) {
+        world[movingTo.x][movingTo.y] = world[movingFrom.x][movingFrom.y];
         world[movingFrom.x][movingFrom.y] = Actor.NONE;
     }
 
@@ -215,10 +242,58 @@ public class Neighbours extends Application {
                 {Actor.NONE, Actor.BLUE, Actor.NONE},
                 {Actor.RED, Actor.NONE, Actor.BLUE}
         };
-        double th = 0.5;   // Simple threshold used for testing
+        double threshold = 0.5;   // Simple threshold used for testing
         int size = testWorld.length;
 
         // TODO test methods
+
+        // Satisfaction of each actor
+        System.out.println(getActorSatisfaction(testWorld, 0, 0, threshold) == State.SATISFIED);
+        System.out.println(getActorSatisfaction(testWorld, 1, 0, threshold) == State.UNSATISFIED);
+        System.out.println(getActorSatisfaction(testWorld, 2, 0, threshold) == State.UNSATISFIED);
+        System.out.println(getActorSatisfaction(testWorld, 0, 1, threshold) == State.SATISFIED);
+        System.out.println(getActorSatisfaction(testWorld, 1, 1, threshold) == State.UNSATISFIED);
+        System.out.println(getActorSatisfaction(testWorld, 2, 1, threshold) == State.UNSATISFIED);
+        System.out.println(getActorSatisfaction(testWorld, 0, 2, threshold) == State.UNSATISFIED);
+        System.out.println(getActorSatisfaction(testWorld, 1, 2, threshold) == State.UNSATISFIED);
+        System.out.println(getActorSatisfaction(testWorld, 2, 2, threshold) == State.SATISFIED);
+
+        // Red dissatisfied actors
+        LinkedList<Point> dissatisfiedRedActors = getDissatisfiedRedActors(testWorld, threshold);
+        Point p = dissatisfiedRedActors.removeLast();
+        System.out.println(p.x == 2 && p.y == 0);
+        System.out.println(dissatisfiedRedActors.size() == 0);
+
+        // Blue dissatisfied actors
+        LinkedList<Point> dissatisfiedBlueActors = getDissatisfiedBlueActors(testWorld, threshold);
+        p = dissatisfiedBlueActors.removeLast();
+        System.out.println(p.x == 1 && p.y == 1);
+        System.out.println(dissatisfiedBlueActors.size() == 0);
+
+        // Empty actors
+        LinkedList<Point> emptyActors = getEmptyActors(testWorld);
+        p = emptyActors.removeLast();
+        System.out.println(p.x == 0 && p.y == 2);
+        System.out.println(emptyActors.size() == 3);
+
+        p = emptyActors.removeLast();
+        System.out.println(p.x == 1 && p.y == 0);
+        System.out.println(emptyActors.size() == 2);
+
+        p = emptyActors.removeLast();
+        System.out.println(p.x == 1 && p.y == 2);
+        System.out.println(emptyActors.size() == 1);
+
+        p = emptyActors.removeLast();
+        System.out.println(p.x == 2 && p.y == 1);
+        System.out.println(emptyActors.size() == 0);
+
+        // Moving a point
+        movePoint(testWorld, new Point(0, 0), new Point(0, 2));
+        // Old position should be NONE
+        System.out.println(testWorld[0][0] == Actor.NONE);
+        // New position should be what the old one was (RED)
+        System.out.println(testWorld[0][2] == Actor.RED);
 
         exit(0);
     }
@@ -236,12 +311,12 @@ public class Neighbours extends Application {
 
     // *****   NOTHING to do below this row, it's JavaFX stuff  ******
 
-    double width = 400;   // Size for window
-    double height = 400;
+    double width = 600;   // Size for window
+    double height = 600;
     long previousTime = nanoTime();
     final long interval = 33300000;
     double dotSize;
-    final double margin = 50;
+    final double margin = 0;
 
     void fixScreenSize(int nLocations) {
         // Adjust screen window depending on nLocations
