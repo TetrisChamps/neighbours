@@ -1,0 +1,48 @@
+Initialize:
+    - Relevant variables:
+        + Distribution[]
+        + Actor
+        + nLocations
+        + size = Math.sqrt(nLocations);
+        + nLocations = Math.pow(size, 2);
+        + nRed = dist[0] * nLocations
+        + nBlue = dist[1] * nLocations
+        + Empty slots
+
+    - Functionality (in order)
+        + Assign the right size/nLoc
+        + Assign the right amount of red/blue
+        + Assign the empty loc array with coordinates/points
+        + Place all red actor
+            + Shuffle the array? // Faster with linkedList
+            OR
+            + Remove a random entry from the list? // Faster with linkedList
+        + Place all blue actors
+        + Fill all empty slots
+    - Classes
+        + Point
+        + Settings
+
+    - Functions
+        + calcSize()
+        + readConfigFile()
+        + createEmptyPointList()
+        + shuffleLists()
+        + calcDistro()
+        + PlaceActors(Actor, EmptyList)
+
+Update Functional decomposition:
+    - updateWorld
+        + CheckSatisfaction
+        + MoveDisatisfied
+
+Update:
+    - Steps
+        + 3 Lists
+            : Dissatisfied RED
+            : Dissatisfied BLUE
+            : NONE
+        + Fill the lists
+        + Shuffle the lists
+        + Swap the NONE and RED/BLUE until the NONES or RED/BLUES has been emptied
+
